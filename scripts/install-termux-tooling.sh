@@ -35,10 +35,37 @@ if [ -z "$SERIAL" ]; then
 fi
 A() { "$ADB" -s "$SERIAL" "$@"; }
 
-A shell "su -c 'id -u'" | grep -q 0 || { echo "设备未 root" >&2; exit 1; }
-A shell pm list packages | grep -q "com.termux" || { echo "设备未安装 Termux" >&2; exit 1; }
+# Windows 版 adb.exe 不认 WSL 路径（/mnt/d/x → D:/x），推送前统一转换
+wpath() {
+  local p="$1"
+  case "$p" in
+    /mnt/[a-zA-Z]/*)
+      local drive="${p#/mnt/}"; drive="${drive%%/*}"
+      local rest="${p#/mnt/$drive/}"
+      printf '%s:/%s\n' "${drive^^}" "$rest"
+      ;;
+    *) printf '%s\n' "$p" ;;
+  esac
+}
 
-TERMUX_UID=$(A shell dumpsys package com.termux | grep -oE "userId=[0-9]+" | head -1 | cut -d= -f2)
+ROOT_UID=$(A shell "su -c 'id -u'" 2>/dev/null | tr -d '\r' || true)
+[ "$ROOT_UID" = "0" ] || { echo "设备未 root" >&2; exit 1; }
+PKG_LIST=$(A shell pm list packages 2>/dev/null | tr -d '\r' || true)
+case "$PKG_LIST" in
+  *com.termux*) ;;
+  *) echo "设备未安装 Termux" >&2; exit 1 ;;
+esac
+
+TERMUX_UID=$(A shell dumpsys package com.termux 2>/dev/null | tr -d '\r' \
+  | grep -oE '(userId|appId)=[0-9]+' | head -1 | cut -d= -f2 || true)
+if [ -z "$TERMUX_UID" ]; then
+  # Android 15 的 dumpsys 只有 appId=，再退回 pm -U / stat
+  TERMUX_UID=$(A shell "pm list packages -U com.termux" 2>/dev/null | tr -d '\r' \
+    | grep -oE 'uid:[0-9]+' | head -1 | cut -d: -f2 || true)
+fi
+if [ -z "$TERMUX_UID" ]; then
+  TERMUX_UID=$(A shell "su -c 'stat -c %u /data/data/com.termux'" 2>/dev/null | tr -d '\r' || true)
+fi
 [ -n "$TERMUX_UID" ] || { echo "取不到 Termux uid" >&2; exit 1; }
 
 TH="/data/data/com.termux/files/home"
@@ -47,12 +74,12 @@ TMP="/data/local/tmp/oit-font-tooling"
 
 echo "==> 推送文件到 $TMP"
 A shell "rm -rf $TMP && mkdir -p $TMP"
-A push "$REPO_ROOT/bin/oit-font"                  "$TMP/oit-font"                  >/dev/null
-A push "$REPO_ROOT/bin/font-help"                 "$TMP/font-help"                 >/dev/null
-A push "$REPO_ROOT/bin/fnote"                     "$TMP/fnote"                     >/dev/null
-A push "$REPO_ROOT/share/TERMUX-NOTES.md"         "$TMP/TERMUX-NOTES.md"            >/dev/null
-A push "$REPO_ROOT/share/bashrc-block.sh"         "$TMP/bashrc-block.sh"            >/dev/null
-A push "$REPO_ROOT/scripts/patch-termux-bashrc.sh" "$TMP/patch-termux-bashrc.sh"    >/dev/null
+A push "$(wpath "$REPO_ROOT/bin/oit-font")"                  "$TMP/oit-font"                  >/dev/null
+A push "$(wpath "$REPO_ROOT/bin/font-help")"                 "$TMP/font-help"                 >/dev/null
+A push "$(wpath "$REPO_ROOT/bin/fnote")"                     "$TMP/fnote"                     >/dev/null
+A push "$(wpath "$REPO_ROOT/share/TERMUX-NOTES.md")"         "$TMP/TERMUX-NOTES.md"            >/dev/null
+A push "$(wpath "$REPO_ROOT/share/bashrc-block.sh")"         "$TMP/bashrc-block.sh"            >/dev/null
+A push "$(wpath "$REPO_ROOT/scripts/patch-termux-bashrc.sh")" "$TMP/patch-termux-bashrc.sh"    >/dev/null
 
 echo "==> 安装到 Termux"
 A shell "su -c '
