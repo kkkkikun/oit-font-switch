@@ -49,6 +49,7 @@ echo "==> 推送文件到 $TMP"
 A shell "rm -rf $TMP && mkdir -p $TMP"
 A push "$REPO_ROOT/bin/oit-font"                  "$TMP/oit-font"                  >/dev/null
 A push "$REPO_ROOT/bin/font-help"                 "$TMP/font-help"                 >/dev/null
+A push "$REPO_ROOT/bin/fnote"                     "$TMP/fnote"                     >/dev/null
 A push "$REPO_ROOT/share/TERMUX-NOTES.md"         "$TMP/TERMUX-NOTES.md"            >/dev/null
 A push "$REPO_ROOT/share/bashrc-block.sh"         "$TMP/bashrc-block.sh"            >/dev/null
 A push "$REPO_ROOT/scripts/patch-termux-bashrc.sh" "$TMP/patch-termux-bashrc.sh"    >/dev/null
@@ -59,14 +60,17 @@ A shell "su -c '
   mkdir -p $TH/bin
   cp $TMP/oit-font        $TP/bin/oit-font
   cp $TMP/font-help       $TP/bin/font-help
+  cp $TMP/fnote           $TP/bin/fnote
   cp $TMP/oit-font        $TH/bin/oit-font
   cp $TMP/font-help       $TH/bin/font-help
+  cp $TMP/fnote           $TH/bin/fnote
   cp $TMP/TERMUX-NOTES.md $TH/TERMUX-NOTES.md
-  chmod 0755 $TP/bin/oit-font $TP/bin/font-help $TH/bin/oit-font $TH/bin/font-help
+  chmod 0755 $TP/bin/oit-font $TP/bin/font-help $TP/bin/fnote \
+            $TH/bin/oit-font $TH/bin/font-help $TH/bin/fnote
   chmod 0600 $TH/TERMUX-NOTES.md
   sh $TMP/patch-termux-bashrc.sh $TH $TMP/bashrc-block.sh
-  chown $TERMUX_UID:$TERMUX_UID $TP/bin/oit-font $TP/bin/font-help \
-        $TH/bin/oit-font $TH/bin/font-help $TH/TERMUX-NOTES.md \
+  chown $TERMUX_UID:$TERMUX_UID $TP/bin/oit-font $TP/bin/font-help $TP/bin/fnote \
+        $TH/bin/oit-font $TH/bin/font-help $TH/bin/fnote $TH/TERMUX-NOTES.md \
         $TH/.bashrc $TH/.profile 2>/dev/null || true
   rm -rf $TMP
 '"
@@ -74,12 +78,14 @@ A shell "su -c '
 echo
 echo "已安装："
 echo "  $TP/bin/oit-font        （全局黑板报 / 可选字体 / 原厂 三档）"
-echo "  $TP/bin/font-help       （速查表）"
+echo "  $TP/bin/font-help       （速查表：目录 / 按节 / 搜索）"
+echo "  $TP/bin/fnote           （往速查表里追加自己的笔记）"
 echo "  $TH/TERMUX-NOTES.md     （速查表内容，可自行编辑）"
 echo "  $TH/.bashrc             （加了 ~/bin 到 PATH + 开终端一行提醒）"
 echo
 echo "手机上打开 Termux，输入："
 echo "  oit-font    → 交互菜单"
-echo "  fh          → 常用命令速查表"
+echo "  fh          → 速查表目录（fh <章节> 看某一节，fh -s <词> 搜索）"
+echo "  fnote <内容> → 记一条自己的笔记"
 echo
 echo "提示：如果 Termux 已经开着，重开一个终端（或执行 exec bash）让 .bashrc 生效。"

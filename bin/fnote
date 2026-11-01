@@ -1,0 +1,107 @@
+#!/data/data/com.termux/files/usr/bin/sh
+#
+# fnote —— 往 Termux 速查表里追加自己的笔记
+#
+#   fnote <内容>             追加到「我的笔记」
+#   fnote -c <章节> <内容>    追加到指定章节（章节不存在就新建）
+#   fnote -l                 只看「我的笔记」
+#   fnote -d                 清空「我的笔记」（会二次确认）
+#   fnote -t <内容>          同第一行，但带时间戳
+#   fnote -h                 用法
+#
+NOTES="${TERMUX_NOTES:-$HOME/TERMUX-NOTES.md}"
+DEFAULT_SECTION="我的笔记"
+
+usage() {
+  cat <<'EOF'
+用法：
+  fnote <内容>              追加一条到「我的笔记」
+  fnote -c <章节> <内容>     追加到指定章节（不存在则新建）
+  fnote -l                  只看「我的笔记」
+  fnote -d                  清空「我的笔记」（需确认）
+  fnote -t <内容>           追加并带时间戳
+
+例子：
+  fnote scrcpy 装在电脑上了，用 scrcpy 投屏
+  fnote -c 无线\ ADB 手机 IP 是 10.3.116.101
+EOF
+}
+
+die() { echo "$*" >&2; exit 1; }
+
+[ -f "$NOTES" ] || die "找不到速查表文件: $NOTES
+（重装：cd <仓库目录> && ./scripts/install-termux-tooling.sh）"
+
+append_to_section() {
+  sec="$1"; text="$2"
+  if ! grep -q "^## $sec\$" "$NOTES"; then
+    # 章节不存在 → 在文件末尾新建
+    { echo; echo "## $sec"; echo; echo "$text"; } >> "$NOTES"
+    echo "已新建章节「$sec」并写入。"
+    return 0
+  fi
+  awk -v sec="$sec" -v text="$text" '
+    function emit(   i) { for (i = 0; i < n; i++) print buf[i]; print text; n = 0 }
+    /^## /{
+      if (inbuf) { emit(); inbuf = 0 }
+      s = substr($0, 4)
+      if (s == sec) { inbuf = 1; print; next }
+      print
+      next
+    }
+    inbuf { buf[n++] = $0; next }
+    { print }
+    END { if (inbuf) emit() }
+  ' "$NOTES" > "$NOTES.new" && mv "$NOTES.new" "$NOTES"
+  echo "已写入「$sec」。"
+}
+
+# 把用户给的章节名解析成文件里真实存在的标题
+# 精确 → 包含 → 都不中就返回原样（由 append_to_section 新建）
+resolve_section() {
+  hit=$(awk -v kw="$1" '/^## /{ s=substr($0,4); if(s==kw){print s; exit} }' "$NOTES")
+  if [ -n "$hit" ]; then echo "$hit"; return 0; fi
+  hit=$(awk -v kw="$1" '/^## /{ s=substr($0,4); if(index(s,kw)>0){print s; exit} }' "$NOTES")
+  if [ -n "$hit" ]; then echo "$hit"; return 0; fi
+  echo "$1"
+}
+
+print_notes() {
+  awk '/^## 我的笔记$/{f=1; next} /^## /{f=0} f{print}' "$NOTES"
+}
+
+case "$1" in
+  -h|--help|help)
+    usage
+    ;;
+  -l|--list)
+    print_notes
+    ;;
+  -d|--delete)
+    echo "确定要清空「我的笔记」吗？（y/N）"
+    read -r ans || ans=""
+    case "$ans" in
+      y|Y|yes|YES) : ;;
+      *) echo "已取消。"; exit 0 ;;
+    esac
+    awk '/^## 我的笔记$/{f=1; print; next} /^## /{f=0} f && !/^## /{next} {print}' \
+      "$NOTES" > "$NOTES.new" && mv "$NOTES.new" "$NOTES"
+    echo "已清空。"
+    ;;
+  -c|--category)
+    [ -n "$2" ] && [ -n "$3" ] || die "用法: fnote -c <章节> <内容>"
+    append_to_section "$(resolve_section "$2")" "$3"
+    ;;
+  -t|--time)
+    shift
+    [ $# -gt 0 ] || die "用法: fnote -t <内容>"
+    stamp=$(date '+%Y-%m-%d %H:%M')
+    append_to_section "$DEFAULT_SECTION" "- [$stamp] $*"
+    ;;
+  "")
+    usage
+    ;;
+  *)
+    append_to_section "$DEFAULT_SECTION" "- $*"
+    ;;
+esac

@@ -1,25 +1,119 @@
 #!/data/data/com.termux/files/usr/bin/sh
 #
-# font-help —— 常用命令速查表
+# font-help —— Termux 速查表（章节目录 / 按节查看 / 全文搜索）
 #
-# 打印 ~/TERMUX-NOTES.md（可自己编辑，随时补充）
+#   fh                列出所有章节
+#   fh <章节>         打印该章节（支持序号、中文、英文关键字）
+#   fh -s <关键字>     全文搜索
+#   fh -t             只看「我的笔记」
+#   fh -a             全部内容
+#   fh -h             用法
 #
-NOTES="$HOME/TERMUX-NOTES.md"
+# 数据源就是 ~/TERMUX-NOTES.md，随时可以自己编辑。
+#
+NOTES="${TERMUX_NOTES:-$HOME/TERMUX-NOTES.md}"
 
-if [ -f "$NOTES" ]; then
-  cat "$NOTES"
-  exit 0
-fi
+usage() {
+  cat <<'EOF'
+用法：
+  fh                列出所有章节
+  fh <章节>         打印该章节（序号 / 中文 / 英文关键字都行）
+  fh -s <关键字>     全文搜索
+  fh -t             只看「我的笔记」
+  fh -a             全部内容
+  fh -h             这段帮助
 
-cat <<'EOF'
-========================================
-          常用命令速查表（未安装）
-========================================
-  没有找到 ~/TERMUX-NOTES.md
+配套命令：
+  fnote <内容>            追加一条到「我的笔记」
+  fnote -c <章节> <内容>   追加到指定章节
+  fnote -l                只看「我的笔记」
 
-  字体切换：   oit-font        （交互菜单）
-               oit-font status （查看当前模式）
-
-  重装本速查表：
-  ./scripts/install-termux-tooling.sh
+速查表文件：~/TERMUX-NOTES.md（可以直接编辑）
 EOF
+}
+
+die() { echo "$*" >&2; exit 1; }
+
+[ -f "$NOTES" ] || die "找不到速查表文件: $NOTES
+（重装：cd <仓库目录> && ./scripts/install-termux-tooling.sh）"
+
+# ---- 章节目录 ----
+toc() {
+  awk '/^## /{n++; printf "  %2d) %s\n", n, substr($0, 4)}' "$NOTES"
+}
+
+# ---- 打印某一节（mode: eq 精确 / contains 包含）----
+print_section() {
+  awk -v kw="$1" -v mode="$2" '
+    /^## /{
+      if (found) exit
+      s = substr($0, 4)
+      if (mode == "eq") { if (s == kw) found = 1 }
+      else                { if (index(s, kw) > 0) found = 1 }
+      if (found) { print "【" s "】"; print ""; next }
+      next
+    }
+    found { print }
+  ' "$NOTES"
+}
+
+# ---- 全文搜索 ----
+do_search() {
+  awk -v kw="$1" '
+    /^## /{ sec = substr($0, 4); next }
+    {
+      low = tolower($0); k = tolower(kw)
+      if (index(low, k) > 0) {
+        if (sec != shown) { if (shown != "") print ""; print "【" sec "】"; shown = sec }
+        print "  " $0
+        n++
+      }
+    }
+    END { if (n == 0) print "  （没有匹配）" }
+  ' "$NOTES"
+}
+
+# ---- 我的笔记 ----
+print_notes() {
+  awk '/^## 我的笔记$/{f=1; next} /^## /{f=0} f{print}' "$NOTES"
+}
+
+case "$1" in
+  -h|--help|help)
+    usage
+    ;;
+  "")
+    toc
+    ;;
+  -a|--all)
+    cat "$NOTES"
+    ;;
+  -t|--notes)
+    print_notes
+    ;;
+  -s|--search)
+    [ -n "$2" ] || die "用法: fh -s <关键字>"
+    do_search "$2"
+    ;;
+  -l|--list)
+    toc
+    ;;
+  *)
+    kw="$1"
+    # 纯数字 → 当作章节序号
+    if printf '%s' "$kw" | grep -qE '^[0-9]+$'; then
+      kw=$(awk -v n="$kw" '/^## /{i++; if(i==n){print substr($0,4); exit}}' "$NOTES")
+      [ -n "$kw" ] || die "没有编号为 $1 的章节"
+    fi
+    out=$(print_section "$kw" eq)
+    [ -n "$out" ] || out=$(print_section "$kw" contains)
+    [ -n "$out" ] || {
+      echo "没有找到章节：$1" >&2
+      echo >&2
+      echo "现有章节：" >&2
+      toc >&2
+      exit 1
+    }
+    printf '%s\n' "$out"
+    ;;
+esac

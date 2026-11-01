@@ -144,7 +144,8 @@ adb reboot
 .
 ├── bin/
 │   ├── oit-font                        # Termux 侧的切换命令（手机上用它）
-│   └── font-help                       # 打印速查表（alias: fh）
+│   ├── font-help                       # 速查表 CLI（alias: fh）
+│   └── fnote                           # 往速查表追加笔记（alias: note）
 ├── magisk/install_magisk_module.sh     # Magisk 模块安装脚本（v3，三模式）
 ├── tools/
 │   ├── patch_font_config.py            # 改写运行时字体配置（chalk / optional）
@@ -166,18 +167,67 @@ adb reboot
 
 `install-termux-tooling.sh` 会在手机上做三件事：
 
-1. `oit-font` / `font-help` 装进 `$PREFIX/bin` 与 `~/bin`
+1. `oit-font` / `font-help` / `fnote` 装进 `$PREFIX/bin` 与 `~/bin`
 2. 速查表落到 `~/TERMUX-NOTES.md` —— **你自己就能编辑**，想加什么加什么
 3. 幂等地给 `~/.bashrc` 写一段（标记块，重复执行不会堆积）：
-   把 `~/bin` 加进 PATH、注册 `alias fh='font-help'`、
+   把 `~/bin` 加进 PATH、注册 `alias fh='font-help'` / `alias note='fnote'`、
    并且**每次开一个交互式终端时打印一行提醒**：
 
    ```
-   [字体切换] oit-font 打开菜单   fh 看常用命令速查
+   [字体] oit-font 切换字体   fh 速查表   fnote 记一条
    ```
 
 `~/.profile` 也会被补上加载 `~/.bashrc` 的语句，
 保证 bash 以 login shell 启动时同样生效。
+
+### 速查表是个真正的 CLI
+
+数据源就是 `~/TERMUX-NOTES.md`（一份可编辑的 markdown，章节用 `##` 标题分隔），
+`fh` 解析它，所以**你改完文件立刻生效**，不用管脚本。
+
+```bash
+fh                  # 章节目录（17 个分类）
+fh 字体切换          # 打印某一章（序号 / 中文 / 英文关键字都行）
+fh 1                # 按序号取
+fh -s ping          # 全文搜索
+fh -t               # 只看「我的笔记」
+fh -a               # 全部内容
+
+fnote scrcpy 装好了，用 scrcpy 投屏      # 追加到「我的笔记」
+fnote -t 今天把字体切成了 chalk           # 带时间戳
+fnote -c 无线\ ADB 手机 IP 是 10.3.116.101 # 追加到指定章节（模糊匹配已有标题）
+fnote -l                                   # 只看我的笔记
+fnote -d                                   # 清空（需确认）
+```
+
+### 速查表收录了什么
+
+17 个分类，全部按**设备上实测可用**写，不收录没装的包：
+
+| 分类 | 内容 |
+|---|---|
+| 字体切换 / 字体模块内部 | 三档命令、模块路径、state、备份、手动 apply |
+| 我的笔记 | `fnote` 的自动追加区 |
+| Termux 基础 | `pkg`/`apt`/`termux-*` 助手、后台任务、已装与未装的包清单 |
+| Termux 文件与编辑 | `nano` `dos2unix` `tar` `diff` `patch` `lsof`、路径速查 |
+| Termux 远程与网络 | `ssh` `scp` 免密、`http.server`、端口转发、`ping`/`traceroute`/`netstat` |
+| 系统命令（免 root） | `getprop` `pm` `settings get` `am` `ping` `logcat`（**实测可用**） |
+| 系统命令（需要 root） | `dumpsys` `screencap` `input` `svc` `pm install` `settings put` 等 |
+| 屏幕与显示 | 截图/录屏/亮度/息屏/常亮 |
+| 无线 ADB | Android 11+ 的配对码方式 + `adb tcpip` 方式 |
+| 常用 adb 命令 | install/push/pull/logcat/reboot/forward/reverse |
+| 设备信息速查 | 机型、分辨率、电池、内存、CPU、存储、运行时长 |
+| Magisk / Root | 模块管理、停用/删除模块、`action.sh` 机制的限制 |
+| 校园网 OIT-Net-Portal | 命令、配置文件位置、凭据约定 |
+| 看小说的 App | 已装的阅读器 + `optional` 模式下可选的字体名 |
+| 效率技巧 | `history`/`!!`/`!$`/`Ctrl+R`/别名/管道 |
+| 故障排查 | 11 条现象 → 原因 → 处理 |
+
+> **免 root / 需要 root 是实测结论**：
+> Termux 里 `dumpsys`（Permission Denial）、`screencap`（Failed to take screenshot）、
+> `svc`（Killed）**都被系统拒掉**，必须走 `su -c`；
+> 而 `getprop` / `pm` / `settings get` / `am start` / `ping` 免 root 可用。
+> 速查表按这个分级写，免得照着敲却报权限错误。
 
 ---
 

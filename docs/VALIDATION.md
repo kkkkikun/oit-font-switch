@@ -80,6 +80,55 @@
 | `Ctrl+C` 取消菜单 | 终端回到干净提示符 |
 | 从 Termux 身份执行 `apply.sh` + 分离式重启 | state chalk→optional，bind 6→2，命中 20→1，systemui pid 变更（框架确实重启） |
 
+### 3.7 速查表升级为真 CLI（2026-11-01）
+
+原来的速查表只是一张静态 markdown。现在改成：**数据源就是可编辑的
+`~/TERMUX-NOTES.md`，`fh` 解析它的 `##` 章节** —— 所以用户改完文件立刻生效。
+
+| 命令 | 行为 | 本地实测 |
+|---|---|---|
+| `fh` | 章节目录（17 类） | ✅ |
+| `fh <章节>` | 按序号 / 中文 / 英文关键字取节（精确 → 包含两级匹配） | ✅ |
+| `fh -s <关键字>` | 全文搜索（按章节分组命中行） | ✅ |
+| `fh -t` | 只看「我的笔记」 | ✅ |
+| `fh -a` | 全部内容 | ✅ |
+| `fnote <内容>` | 追加到「我的笔记」 | ✅ |
+| `fnote -t <内容>` | 带时间戳追加 | ✅ |
+| `fnote -c <章节> <内容>` | 追加到指定章节（**模糊匹配已有标题**，不存在则新建） | ✅ |
+| `fnote -l` / `fnote -d` | 看 / 清空笔记（清空需确认） | ✅ |
+
+### 3.8 速查表内容按设备实测分级
+
+只读盘点设备后按**实际可用性**写，不收录没装的包：
+
+| 结论 | 依据 |
+|---|---|
+| Termux 装了 `pkg/apt/git/python/pip/curl/ssh/scp/nano/dialog/lsof/netstat/traceroute/dos2unix/diff/patch/make/clang` | dpkg status 清单 |
+| **没装** Termux:API（无 `termux-toast`/`termux-battery-status`） | `pm list packages` 只有 `com.termux` + `com.termux.boot` |
+| **没装** Termux:Widget（无桌面小组件） | 同上 |
+| 装了 Termux:Boot（开机自启） | `com.termux.boot` 在列 |
+| `dumpsys` / `screencap` / `svc` **免 root 被拒** | 实测 `Permission Denial` / `Failed to take screenshot` / `Killed` |
+| `getprop` / `pm` / `settings get` / `am start` / `ping` **免 root 可用** | 实测全部成功 |
+| `lsof -i` 不支持（Termux 的 lsof 是精简版） | 实测 `Unknown option 'i'` |
+
+速查表因此分成「系统命令（免 root，实测可用）」和「系统命令（需要 root）」两节，
+避免照着敲却撞权限错误。
+
+### 3.9 本地验证（未触碰设备）
+
+| 验证项 | 方法 | 结果 |
+|---|---|---|
+| bashrc 补丁幂等 | 全新 home / 重复执行 3 次 / 带用户原有配置 / 已有 `.profile` | ✅ 4/4 |
+| `fh` / `fnote` 全部子命令 | 用 `TERMUX_NOTES` 环境变量指向临时文件 | ✅ |
+| 章节模糊匹配 | `-c "无线 ADB"` 正确命中「无线 ADB（免 USB 线）」 | ✅ |
+| 新建章节 / 连续追加不破坏结构 | 追加 3 次后章节结构完好 | ✅ |
+| 安装器设备端操作 | 用假目录复刻 `install-termux-tooling.sh` 的设备端命令块 | ✅ 产物齐全且可运行 |
+
+> **设备侧状态**：`oit-font` 已装且实测可用；
+> `fh` / `fnote` / 速查表 / `~/.bashrc` 提醒**尚未安装** ——
+> 当时设备已让给另一个 Agent，只做了离线准备。
+> 补装命令：`cd /mnt/d/oit-font-switch && ./scripts/install-termux-tooling.sh`（幂等）。
+
 ---
 
 ## 四、位置偏下问题的量化验收
