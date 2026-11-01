@@ -1,0 +1,114 @@
+#!/data/data/com.termux/files/usr/bin/sh
+#
+# oit-font —— 在手机上直接切换全局字体模式
+#
+#   chalk     全局黑板报体底字（默认）
+#   optional  系统默认保持 MiSans，只额外注册一个具名家族
+#             "Hanyi Senty Chalk Original"，供支持自定义字体的 App 按名选用
+#   stock     完全恢复原厂字体
+#
+# 用法：
+#   oit-font                交互菜单
+#   oit-font chalk          直接切到 chalk
+#   oit-font status         查看当前模式与生效情况
+#
+# 依赖：已 root（Kitsune/Magisk）+ 已安装模块
+#       /data/adb/modules/oit-senty-font
+#
+# 原理：apply.sh 负责写 state 并挂载/卸载 bind（只改挂载，不改分区）；
+#       随后的 `stop; start` 重启 framework 让新字体被重新加载
+#       （framework 重启会连带杀掉 Termux，所以用分离进程触发）。
+
+PREFIX=/data/data/com.termux/files/usr
+MODDIR=/data/adb/modules/oit-senty-font
+SU="$PREFIX/bin/su"
+
+die() { echo "$*" >&2; exit 1; }
+
+# 没有 root 就没戏
+[ -x "$SU" ] || die "找不到 su（$SU），本方案需要已 root 的设备"
+
+as_root() { "$SU" -c "$1" 2>/dev/null; }
+
+# /data/adb 只有 root 能 stat，模块存在性也走 su 校验
+as_root "[ -d $MODDIR ]" || die "找不到字体模块 $MODDIR，请先安装 Magisk 模块"
+
+mode_now() { as_root "cat $MODDIR/state 2>/dev/null"; }
+
+describe() {
+  case "$1" in
+    chalk)    echo "全局黑板报体底字（系统所有文字都是黑板报体）" ;;
+    optional) echo "系统默认仍是 MiSans，额外注册一个可选字体供 App 按名选用" ;;
+    stock)    echo "完全恢复原厂字体" ;;
+    *)        echo "未知模式" ;;
+  esac
+}
+
+show_menu() {
+  cur=$(mode_now)
+  [ -z "$cur" ] && cur="(读取失败)"
+  echo "========================================"
+  echo "         黑 板 报 体  字 体 切 换"
+  echo "========================================"
+  echo "  当前模式: $cur  —— $(describe "$cur")"
+  echo
+  echo "  1) chalk     全局黑板报体底字"
+  echo "  2) optional  系统默认仍是 MiSans，额外注册一个可选字体"
+  echo "               （阅读器等 App 可按名选用"
+  echo "                 \"Hanyi Senty Chalk Original\"）"
+  echo "  3) stock     完全恢复原厂字体"
+  echo
+  echo "  切换后系统界面会重启一次，约 20 秒生效。"
+  echo "  （本终端会短暂断开，属正常现象）"
+  echo
+}
+
+do_switch() {
+  target="$1"
+  cur=$(mode_now)
+  if [ "$cur" = "$target" ]; then
+    echo "已经是 $target 模式，无需切换。"
+    return 0
+  fi
+  echo "正在切换到 $target …"
+  if ! as_root "sh $MODDIR/apply.sh $target" >/dev/null; then
+    die "切换失败：apply.sh 执行出错，检查 Magisk 模块状态"
+  fi
+  echo "已切换到 $target —— $(describe "$target")"
+  echo "系统界面将在几秒后重启，本终端会短暂断开，属正常现象。"
+  # framework 重启会杀掉 Termux 自身，所以把重启动作放到独立进程里
+  as_root "nohup sh -c 'sleep 2; stop; start' >/dev/null 2>&1 &" >/dev/null
+  sleep 3
+  return 0
+}
+
+case "$1" in
+  chalk|optional|stock)
+    do_switch "$1"
+    ;;
+  status)
+    cur=$(mode_now)
+    echo "当前模式: ${cur:-未知}  —— $(describe "$cur")"
+    printf "生效中的 bind 数: "
+    as_root "mount | grep -cE 'on /system_ext/etc/(miui|hyper)|on /product/etc/fonts_customization|on /product/fonts/MiSansVF'"
+    printf "黑板报体命中数:   "
+    as_root "dumpsys font | grep -c HanyiSentyChalkOriginal"
+    printf "sans-serif 落点:  "
+    as_root "dumpsys font | grep -A2 'Named Family (sans-serif)' | grep 'path =' | head -1 | sed 's/.*path = //'"
+    ;;
+  "")
+    show_menu
+    printf "请输入 1 / 2 / 3 后回车: "
+    read -r choice || { echo; echo "已取消。"; exit 0; }
+    case "$choice" in
+      1|chalk)    do_switch chalk ;;
+      2|optional) do_switch optional ;;
+      3|stock)    do_switch stock ;;
+      *)          die "无效输入: $choice" ;;
+    esac
+    ;;
+  *)
+    echo "用法: oit-font [chalk|optional|stock|status]"
+    exit 1
+    ;;
+esac

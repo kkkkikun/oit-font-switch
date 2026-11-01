@@ -1,0 +1,25 @@
+#!/data/data/com.termux/files/usr/bin/sh
+#
+# font-help —— 常用命令速查表
+#
+# 打印 ~/TERMUX-NOTES.md（可自己编辑，随时补充）
+#
+NOTES="$HOME/TERMUX-NOTES.md"
+
+if [ -f "$NOTES" ]; then
+  cat "$NOTES"
+  exit 0
+fi
+
+cat <<'EOF'
+========================================
+          常用命令速查表（未安装）
+========================================
+  没有找到 ~/TERMUX-NOTES.md
+
+  字体切换：   oit-font        （交互菜单）
+               oit-font status （查看当前模式）
+
+  重装本速查表：
+  ./scripts/install-termux-tooling.sh
+EOF
